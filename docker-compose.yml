@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  drone_tracker:
+    build: .
+    image: ros2-yolo-tracker:latest
+    container_name: drone_tracker_container
+    network_mode: host
+    ipc: host
+    environment:
+      - DISPLAY=host.docker.internal:0.0
+      - QT_X11_NO_MITSHM=1
+    volumes:
+      - .:/workspace
+    # NVIDIA GPU를 사용할 경우 주석 해제 (NVIDIA Container Toolkit 설치 필요)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    stdin_open: true
+    tty: true
+    command: bash
