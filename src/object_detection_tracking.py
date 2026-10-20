@@ -171,15 +171,25 @@ def process_image_sequence(model: YOLO, input_dir: Path):
                     cls_id = int(box.cls[0].cpu().numpy())
                     cls_name = model.names[cls_id]
 
+                    # 좌표 계산
+                    x1, y1, x2, y2 = xyxy
+                    cx = (x1 + x2) / 2
+                    cy = (y1 + y2) / 2
+                    width = x2 - x1
+                    height = y2 - y1
+
                     # 1. 트랙 상태 초기화 또는 갱신
                     if track_id not in active_tracker_states:
                         active_tracker_states[track_id] = {
                             "hit_streak": 1,
                             "missing_count": 0,
                             "appeared_logged": False,
+                            "appeared_at": None,
                             "class_name": cls_name,
                             "conf": conf,
-                            "bbox": xyxy
+                            "bbox": xyxy,
+                            "center": {"x": cx, "y": cy},
+                            "size": {"width": width, "height": height}
                         }
                     else:
                         state = active_tracker_states[track_id]
@@ -188,22 +198,33 @@ def process_image_sequence(model: YOLO, input_dir: Path):
                         state["class_name"] = cls_name
                         state["conf"] = conf
                         state["bbox"] = xyxy
+                        state["center"] = {"x": cx, "y": cy}
+                        state["size"] = {"width": width, "height": height}
 
                     state = active_tracker_states[track_id]
 
                     # 2. 신규 출현 이벤트 판정 (hit_streak가 임계값에 도달하고 아직 로그를 안 찍었을 때)
                     if state["hit_streak"] >= APPEAR_STREAK_THRES and not state["appeared_logged"]:
                         state["appeared_logged"] = True
+                        state["appeared_at"] = datetime.now().astimezone()
                         event_data = {
-                            "timestamp": datetime.now().isoformat(),
-                            "frame_idx": frame_num,
-                            "source_file": filename,
+                            "timestamp": state["appeared_at"].isoformat(),
                             "event": "TARGET_APPEARED",
                             "target_info": {
                                 "track_id": track_id,
                                 "class_name": cls_name,
-                                "confidence": conf,
+                                "confidence": round(conf, 2),
+                                "coordinate_system": "image",
+                                "unit": "pixel",
                                 "bbox": xyxy,
+                                "center": {
+                                    "x": cx,
+                                    "y": cy
+                                },
+                                "size": {
+                                    "width": width,
+                                    "height": height
+                                },
                                 "stability_count": state["hit_streak"]
                             }
                         }
@@ -213,7 +234,6 @@ def process_image_sequence(model: YOLO, input_dir: Path):
                     print(f"  - [ID:{track_id}] Class: {cls_name} | Conf: {conf:.2f} | BBox: {xyxy}")
 
                     # BBox 및 정보 오버레이 시각화
-                    x1, y1, x2, y2 = xyxy
                     color = (0, 255, 0)
                     cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                     label = f"ID:{track_id} {cls_name} {conf:.2f}"
@@ -229,15 +249,24 @@ def process_image_sequence(model: YOLO, input_dir: Path):
                     # missing_count가 track_buffer(30)에 도달하면 최종 소실로 확정
                     if state["missing_count"] >= track_buffer:
                         if state["appeared_logged"]:  # 출현했던 대상에 한해서만 소실 로그 출력
+                            disappeared_at = datetime.now().astimezone()
+                            duration_sec = (
+                                disappeared_at - state["appeared_at"]
+                            ).total_seconds()
                             event_data = {
-                                "timestamp": datetime.now().isoformat(),
-                                "frame_idx": frame_num,
-                                "source_file": filename,
+                                "timestamp": disappeared_at.isoformat(),
                                 "event": "TARGET_DISAPPEARED",
                                 "target_info": {
                                     "track_id": track_id,
                                     "class_name": state["class_name"],
-                                    "last_bbox": state["bbox"]
+                                    "appeared_at": state["appeared_at"].isoformat(),
+                                    "duration_sec": round(duration_sec, 2),
+                                    "coordinate_system": "image",
+                                    "unit": "pixel",
+                                    "last_bbox": state["bbox"],
+                                    "last_center": state["center"],
+                                    "last_size": state["size"],
+                                    "missing_count": state["missing_count"]
                                 }
                             }
                             print(f"[EVENT JSON LOG]: {json.dumps(event_data, ensure_ascii=False)}")
