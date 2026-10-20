@@ -8,7 +8,6 @@ from pathlib import Path
 # ==========================================
 # 모드 설정: 
 #   - "image": 단일 이미지 탐지
-#   - "video": 동영상 파일 탐지 및 추적
 #   - "sequence": 연속된 이미지 폴더 탐지 및 추적
 MODE = "sequence"
 
@@ -19,11 +18,8 @@ IMAGE_INPUT_DIR = BASE_DIR / "data" / "image_test"
 IMAGE_FILENAME = "v1.jpg"
 IMAGE_INPUT_PATH = IMAGE_INPUT_DIR / IMAGE_FILENAME
 
-# [설정 2] 동영상 모드용 경로
-VIDEO_INPUT_PATH = BASE_DIR / "data" / "sample_video.mp4"
-
 # [설정 3] 연속 이미지 시퀀스 모드용 경로
-SEQUENCE_INPUT_DIR = BASE_DIR / "data" / "sequence_frames"  # 연속 이미지가 들어있는 폴더 경로
+SEQUENCE_INPUT_DIR = BASE_DIR / "data" / "sequence-test" / "video01" # 연속 이미지가 들어있는 폴더 경로
 
 # 결과 저장 설정 (이미지만 지원)
 SAVE_RESULT = True
@@ -87,89 +83,6 @@ def process_image(model: YOLO, input_path: str, save_result: bool, output_dir: s
     cv2.destroyAllWindows()
 
 
-def process_video(model: YOLO, input_path: str):
-    """
-    동영상 파일에 대해 YOLOv8n + BoT-SORT 객체 탐지 및 추적을 수행합니다.
-    """
-    if not os.path.exists(input_path):
-        print(f"[Error] 입력 동영상 파일을 찾을 수 없습니다: {input_path}")
-        return
-
-    cap = cv2.VideoCapture(input_path)
-    if not cap.isOpened():
-        print(f"[Error] 비디오 스트림을 열 수 없습니다: {input_path}")
-        return
-
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    if fps <= 0:
-        fps = 30.0
-
-    print(f"\n--- [VIDEO DETECTION & TRACKING START] ---")
-    print(f"입력 파일: {input_path}")
-    print(f"추적 트래커: {TRACKER_CONFIG}")
-
-    frame_num = 0
-
-    try:
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret:
-                print("동영상 재생 완료 또는 프레임 읽기 실패.")
-                break
-
-            frame_num += 1
-
-            results = model.track(
-                source=frame,
-                conf=CONF_THRES,
-                persist=True,
-                tracker=TRACKER_CONFIG,
-                device=DEVICE,
-                verbose=False
-            )
-
-            result = results[0]
-            boxes = result.boxes
-
-            if boxes is not None and len(boxes) > 0:
-                has_ids = boxes.id is not None
-                track_ids = boxes.id.int().cpu().tolist() if has_ids else [None] * len(boxes)
-
-                print(f"[Frame {frame_num:04d}] 탐지/추적 객체 수: {len(boxes)}")
-
-                for box, track_id in zip(boxes, track_ids):
-                    xyxy = box.xyxy[0].cpu().numpy().astype(int)
-                    conf = float(box.conf[0].cpu().numpy())
-                    cls_id = int(box.cls[0].cpu().numpy())
-                    cls_name = model.names[cls_id]
-
-                    id_str = f"ID:{track_id}" if track_id is not None else "ID: N/A"
-                    print(f"  - [{id_str}] Class: {cls_name} | Conf: {conf:.2f} | BBox: {xyxy.tolist()}")
-
-                    x1, y1, x2, y2 = xyxy
-                    color = (0, 255, 0) if track_id is not None else (0, 165, 255)
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-
-                    label = f"{id_str} {cls_name} {conf:.2f}"
-                    cv2.putText(frame, label, (x1, max(y1 - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-            else:
-                print(f"[Frame {frame_num:04d}] 탐지된 객체 없음")
-
-            cv2.putText(frame, f"Frame: {frame_num}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-            cv2.imshow("YOLOv8 + BoT-SORT Tracking (Video)", frame)
-
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                print("\n사용자에 의해 실행 중단 ('q' 키 감지).")
-                break
-
-    finally:
-        cap.release()
-        cv2.destroyAllWindows()
-        print(f"동영상 처리 완료. 총 {frame_num} 프레임 처리됨.")
-
-
 def process_image_sequence(model: YOLO, input_dir: Path):
     """
     연속된 이미지(JPG) 폴더를 순서대로 불러와 YOLOv8n + BoT-SORT 추적을 수행하고 연속 재생합니다.
@@ -207,6 +120,10 @@ def process_image_sequence(model: YOLO, input_dir: Path):
             if frame is None:
                 print(f"[Warning] 이미지 로드 실패, 건너뜁니다: {filename}")
                 continue
+
+            # 프레임 크기 정보
+            h, w = frame.shape[:2]
+            scale = min(960 / w, 540 / h, 1.0)
 
             frame_num += 1
             height, width = frame.shape[:2]
@@ -246,15 +163,20 @@ def process_image_sequence(model: YOLO, input_dir: Path):
                     cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
 
                     label = f"{id_str} {cls_name} {conf:.2f}"
-                    cv2.putText(frame, label, (x1, max(y1 - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                    cv2.putText(frame, label, (x1, max(y1 - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 3)
             else:
                 print(f"[Frame {frame_num:04d} | {filename}] 탐지된 객체 없음")
 
             # 파일명 및 프레임 번호 화면 표기
             cv2.putText(frame, f"Frame: {frame_num} ({filename})", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
-            # 화면 출력 및 재생 속도 조절
-            cv2.imshow("YOLOv8 + BoT-SORT Tracking (Image Sequence)", frame)
+            # 화면 출력 및 재생 속도 조절, 출력 프레임 크기 조정 (960x540 이하로 축소)
+            display_frame = cv2.resize(
+                frame,
+                (int(w * scale), int(h * scale))
+            ) if scale < 1.0 else frame
+            window_name = "YOLOv8 + BoT-SORT Tracking (Image Sequence)"
+            cv2.imshow(window_name, display_frame)
 
             # 'q' 키 입력 시 즉시 종료 (delay_ms 값으로 재생 속도 제어)
             if cv2.waitKey(delay_ms) & 0xFF == ord("q"):
@@ -279,11 +201,6 @@ def main():
             save_result=SAVE_RESULT,
             output_dir=str(OUTPUT_DIR),
             output_filename=f"{IMAGE_INPUT_PATH.stem}_result{IMAGE_INPUT_PATH.suffix}"
-        )
-    elif MODE == "video":
-        process_video(
-            model=model,
-            input_path=str(VIDEO_INPUT_PATH)
         )
     elif MODE == "sequence":
         process_image_sequence(
