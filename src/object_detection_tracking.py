@@ -1,6 +1,7 @@
 import os
 import json
 import cv2
+import yaml
 from ultralytics import YOLO
 from pathlib import Path
 from datetime import datetime
@@ -28,15 +29,20 @@ SAVE_RESULT = True
 OUTPUT_DIR = BASE_DIR / "debug_images"
 
 # 모델 및 추론 설정
-MODEL_NAME = "yolov8n.pt"                # 모델명 또는 커스텀 학습 가중치 경로 (예: 'best.pt')
+MODEL_NAME = "yolov8n.pt"               # 모델명 또는 커스텀 학습 가중치 경로 (예: 'best.pt')
 CONF_THRES = 0.25                       # Confidence threshold
-TRACKER_CONFIG = "botsort.yaml"         # 트래커 설정
+TRACKER_CONFIG = BASE_DIR / "config" / "botsort.yaml"         # 트래커 설정
 DEVICE = "cpu"                          # "0" 또는 "cuda", "cpu"
 PLAYBACK_FPS = 30                       # sequence 모드 재생 속도
 
-# 이벤트 판정 및 트래커 버퍼 설정 (New!)
-TRACK_BUFFER = 30                       # BoT-SORT 트래커의 미탐지 유지 버퍼 크기
-APPEAR_STREAK_THRES = 3                 # 신규 출현 확정을 위한 최소 연속 탐지 횟수
+# 개별 설정값 불러오기
+with open(TRACKER_CONFIG, "r", encoding="utf-8") as f:
+    tracker_config = yaml.safe_load(f)
+
+track_buffer = tracker_config.get("track_buffer", 30)
+
+# 이벤트 판정 및 트래커 버퍼 설정
+APPEAR_STREAK_THRES = 6                 # 신규 출현 확정을 위한 최소 연속 탐지 횟수 (0.2초)
 
 
 def process_image(model: YOLO, input_path: str, save_result: bool, output_dir: str, output_filename: str):
@@ -201,7 +207,7 @@ def process_image_sequence(model: YOLO, input_dir: Path):
                                 "stability_count": state["hit_streak"]
                             }
                         }
-                        print(f"👉 [EVENT JSON LOG]: {json.dumps(event_data, ensure_ascii=False)}")
+                        print(f"[EVENT JSON LOG]: {json.dumps(event_data, ensure_ascii=False)}")
 
                     # 터미널 상세 출력
                     print(f"  - [ID:{track_id}] Class: {cls_name} | Conf: {conf:.2f} | BBox: {xyxy}")
@@ -220,8 +226,8 @@ def process_image_sequence(model: YOLO, input_dir: Path):
             for track_id, state in active_tracker_states.items():
                 if track_id not in current_frame_ids:
                     state["missing_count"] += 1
-                    # missing_count가 TRACK_BUFFER(30)에 도달하면 최종 소실로 확정
-                    if state["missing_count"] >= TRACK_BUFFER:
+                    # missing_count가 track_buffer(30)에 도달하면 최종 소실로 확정
+                    if state["missing_count"] >= track_buffer:
                         if state["appeared_logged"]:  # 출현했던 대상에 한해서만 소실 로그 출력
                             event_data = {
                                 "timestamp": datetime.now().isoformat(),
@@ -234,7 +240,7 @@ def process_image_sequence(model: YOLO, input_dir: Path):
                                     "last_bbox": state["bbox"]
                                 }
                             }
-                            print(f"👉 [EVENT JSON LOG]: {json.dumps(event_data, ensure_ascii=False)}")
+                            print(f"[EVENT JSON LOG]: {json.dumps(event_data, ensure_ascii=False)}")
                         expired_ids.append(track_id)
 
             # 완전히 만료된 트랙 ID 정리
