@@ -1,26 +1,31 @@
 import os
 import cv2
 from ultralytics import YOLO
+from pathlib import Path
 
 # ==========================================
 # 0. Configuration & Parameters
 # ==========================================
 # 모드 설정: "image" (이미지 탐지) 또는 "video" (동영상 탐지 및 추적)
-MODE = "video"
+MODE = "image"
+
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 # 입력 파일 경로
-INPUT_PATH = "sample_video.mp4"  # 또는 "sample_image.jpg"
+INPUT_DIR = BASE_DIR / "data" / "image_test"
+INPUT_FILENAME = "v1.jpg"  # 또는 "sample_video.mp4"
+INPUT_PATH = INPUT_DIR / INPUT_FILENAME
 
 # 결과 저장 설정
 SAVE_RESULT = True
-OUTPUT_DIR = "output_results"
-OUTPUT_FILENAME = "result_output.mp4"  # 이미지는 "result_output.jpg"
+OUTPUT_DIR = BASE_DIR / "debug_images"
+OUTPUT_FILENAME = f"{Path(INPUT_FILENAME).stem}_result{Path(INPUT_FILENAME).suffix}"
 
 # 모델 및 추론 설정
 MODEL_NAME = "yolov8n.pt"  # 모델명 또는 커스텀 학습 가중치 경로 (예: 'best.pt')
-CONF_THRES = 0.25         # Confidence threshold
-TRACKER_CONFIG = "botsort.yaml"  # Ultralytics 지원 트래커: "botsort.yaml" 또는 "bytetrack.yaml"
-DEVICE = "0"              # "cuda:0", "0", "cpu" 등 (GPU 사용 시 "0" 또는 "cuda", CPU만 쓸 경우 "cpu")
+CONF_THRES = 0.25          # Confidence threshold
+TRACKER_CONFIG = "botsort.yaml"
+DEVICE = "cpu"              # GPU ㅡ "0" 또는 "cuda", CPU ㅡ "cpu"
 
 
 def process_image(model: YOLO, input_path: str, save_result: bool, output_dir: str, output_filename: str):
@@ -65,8 +70,9 @@ def process_image(model: YOLO, input_path: str, save_result: bool, output_dir: s
 
             # BBox 및 텍스트 시각화
             x1, y1, x2, y2 = xyxy
-            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2) # Green
             label = f"{cls_name} {conf:.2f}"
+       
             cv2.putText(img, label, (x1, max(y1 - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
     # 결과 표시
@@ -78,13 +84,14 @@ def process_image(model: YOLO, input_path: str, save_result: bool, output_dir: s
         os.makedirs(output_dir, exist_ok=True)
         save_path = os.path.join(output_dir, output_filename)
         cv2.imwrite(save_path, img)
+
         print(f"결과 이미지 저장 완료: {save_path}")
 
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
 
-def process_video(model: YOLO, input_path: str, save_result: bool, output_dir: str, output_filename: str):
+def process_video(model: YOLO, input_path: str):
     """
     동영상 파일에 대해 YOLOv8n + BoT-SORT 객체 탐지 및 추적을 수행합니다.
     """
@@ -103,14 +110,6 @@ def process_video(model: YOLO, input_path: str, save_result: bool, output_dir: s
     fps = cap.get(cv2.CAP_PROP_FPS)
     if fps <= 0:
         fps = 30.0
-
-    writer = None
-    if save_result:
-        os.makedirs(output_dir, exist_ok=True)
-        save_path = os.path.join(output_dir, output_filename)
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        writer = cv2.VideoWriter(save_path, fourcc, fps, (width, height))
-        print(f"결과 동영상 저장 위치: {save_path}")
 
     print(f"\n--- [VIDEO DETECTION & TRACKING START] ---")
     print(f"입력 파일: {input_path}")
@@ -170,10 +169,6 @@ def process_video(model: YOLO, input_path: str, save_result: bool, output_dir: s
             # 프레임 번호 화면 표기
             cv2.putText(frame, f"Frame: {frame_num}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
-            # 결과 프레임 저장이 설정된 경우 기록
-            if writer is not None:
-                writer.write(frame)
-
             # 화면 출력
             cv2.imshow("YOLOv8 + BoT-SORT Tracking", frame)
 
@@ -184,13 +179,12 @@ def process_video(model: YOLO, input_path: str, save_result: bool, output_dir: s
 
     finally:
         cap.release()
-        if writer is not None:
-            writer.release()
         cv2.destroyAllWindows()
         print(f"동영상 처리 완료. 총 {frame_num} 프레임 처리됨.")
 
 
 def main():
+
     # 1. 모델 단 1회 로드 (재사용)
     print(f"YOLO 모델 로딩 중 ({MODEL_NAME})...")
     model = YOLO(MODEL_NAME)
@@ -199,18 +193,15 @@ def main():
     if MODE == "image":
         process_image(
             model=model,
-            input_path=INPUT_PATH,
+            input_path=str(INPUT_PATH),
             save_result=SAVE_RESULT,
-            output_dir=OUTPUT_DIR,
+            output_dir=str(OUTPUT_DIR),
             output_filename=OUTPUT_FILENAME
         )
     elif MODE == "video":
         process_video(
             model=model,
-            input_path=INPUT_PATH,
-            save_result=SAVE_RESULT,
-            output_dir=OUTPUT_DIR,
-            output_filename=OUTPUT_FILENAME
+            input_path=str(INPUT_PATH)
         )
     else:
         print(f"[Error] 지원하지 않는 MODE입니다: {MODE}. 'image' 또는 'video'를 사용하세요.")
