@@ -247,8 +247,8 @@ class ObjectDetectionTrackingNode(Node):
                                     "stability_count": state["hit_streak"]
                                 }
                             }
-                            json_str = json.dumps(event_data, ensure_ascii=False)
-                            self.get_logger().info(f"[EVENT JSON LOG]: {json_str}")
+                            json_str = json.dumps(event_data, ensure_ascii=False, indent=2)
+                            self.get_logger().info(f"[EVENT JSON LOG]:\n{json_str}")
                             
                             # ROS 2 토픽 발행
                             msg = String()
@@ -297,8 +297,8 @@ class ObjectDetectionTrackingNode(Node):
                                         "missing_count": state["missing_count"]
                                     }
                                 }
-                                json_str = json.dumps(event_data, ensure_ascii=False)
-                                self.get_logger().info(f"[EVENT JSON LOG]: {json_str}")
+                                json_str = json.dumps(event_data, ensure_ascii=False, indent=2)
+                                self.get_logger().info(f"[EVENT JSON LOG]:\n{json_str}")
                                 
                                 msg = String()
                                 msg.data = json_str
