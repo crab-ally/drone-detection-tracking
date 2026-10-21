@@ -2,11 +2,8 @@
 app_config:
   mode: "sequence"  # "image" 또는 "sequence"
   
-  # 경로 설정 (상대 경로 또는 절대 경로)
-  # 패키지 외부에 있는 대용량 데이터 폴더 경로
+  # 시퀀스 모드 설정
   sequence_input_dir: "/workspace/data/sequence-test/video01"
-  image_input_path: "/workspace/data/image_test/v1.jpg"
-  output_dir: "/workspace/debug_images"
   
   # 모델 및 추론 설정
   model_name: "/workspace/model/yolov8n.pt"
@@ -16,3 +13,8 @@ app_config:
   
   # 이벤트 판정 설정
   appear_streak_thres: 6
+
+  # 이미지 모드 설정
+  image_input_path: "/workspace/data/image_test/v1.jpg"
+  output_dir: "/workspace/debug_images"
+  save_result: True
