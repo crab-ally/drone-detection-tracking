@@ -1,0 +1,14 @@
+# 빌드 산출물
+ros_ws/build/
+ros_ws/install/
+ros_ws/log/
+
+# 욜로 기본 모델
+model/yolov8n.pt
+
+# 테스트 이미지
+data/image_test/*.jpg
+data/sequence-test/video*/
+
+# 결과 이미지
+debug_images/*.jpg
