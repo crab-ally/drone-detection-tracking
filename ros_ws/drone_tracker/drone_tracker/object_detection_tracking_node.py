@@ -4,6 +4,7 @@ import cv2
 import yaml
 from pathlib import Path
 from datetime import datetime
+from ament_index_python.packages import get_package_share_directory
 
 import rclpy
 from rclpy.node import Node
@@ -22,36 +23,41 @@ class ObjectDetectionTrackingNode(Node):
         # ==========================================
         # 0. Configuration & Parameters (기존 설정 유지)
         # ==========================================
-        self.mode = "sequence"  # "image" 또는 "sequence"
+        try:
+            package_share_dir = Path(get_package_share_directory('drone_vision_pkg'))
+            self.main_config_path = package_share_dir / "config" / "config.yaml"
+            self.tracker_config_path = package_share_dir / "config" / "botsort.yaml"
+        except Exception:
+            # 하드코딩
+            base_dir = Path("/workspace/ros_ws/drone_tracker")
+            self.main_config_path = base_dir / "config" / "config.yaml"
+            self.tracker_config_path = base_dir / "config" / "botsort.yaml"
 
-        self.base_dir = Path(__file__).resolve().parents[3]  # workspace
+        # config.yaml 파싱
+        with open(self.main_config_path, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f)["app_config"]
 
-        self.image_input_dir = self.base_dir / "data" / "image_test"
-        self.image_filename = "v1.jpg"
-        self.image_input_path = self.image_input_dir / self.image_filename
-
-        self.sequence_input_dir = self.base_dir / "data" / "sequence-test" / "video01"
-
-        # 현재 이미지만 지원
+        # 설정값 및 경로 매핑
+        self.mode = cfg.get("mode", "sequence")
+        self.sequence_input_dir = Path(cfg.get("sequence_input_dir"))
+        self.image_input_path = Path(cfg.get("image_input_path"))
+        self.output_dir = Path(cfg.get("output_dir"))
         self.save_result = True
-        self.output_dir = self.base_dir / "debug_images"
 
-        self.model_name = "yolov8n.pt"
-        self.conf_thres = 0.25
-        self.tracker_config = Path(__file__).resolve().parents[1] / "config" / "botsort.yaml"
-        self.device = "cpu"
-        self.playback_fps = 30
+        self.model_name = cfg.get("model_name", "yolov8n.pt")
+        self.conf_thres = cfg.get("conf_thres", 0.25)
+        self.device = cfg.get("device", "cpu")
+        self.playback_fps = cfg.get("playback_fps", 30)
+        self.appear_streak_thres = cfg.get("appear_streak_thres", 6)
 
-        # 트래커 설정 로드
-        if os.path.exists(self.tracker_config):
-            with open(self.tracker_config, "r", encoding="utf-8") as f:
-                tracker_config = yaml.safe_load(f)
-            self.track_buffer = tracker_config.get("track_buffer", 30)
+        # BoT-SORT 트래커 설정 로드
+        if os.path.exists(self.tracker_config_path):
+            with open(self.tracker_config_path, "r", encoding="utf-8") as f:
+                tracker_cfg = yaml.safe_load(f)
+            self.track_buffer = tracker_cfg.get("track_buffer", 30)
         else:
-            self.get_logger().warn(f"Tracker config not found at {self.tracker_config}, using default track_buffer=30")
+            self.get_logger().warn(f"Tracker config not found, using default track_buffer=30")
             self.track_buffer = 30
-
-        self.appear_streak_thres = 6
 
         # 모델 로드
         self.get_logger().info(f"YOLO 모델 로딩 중 ({self.model_name})...")
@@ -158,7 +164,7 @@ class ObjectDetectionTrackingNode(Node):
                     source=frame,
                     conf=self.conf_thres,
                     persist=True,
-                    tracker=str(self.tracker_config) if os.path.exists(self.tracker_config) else "botsort.yaml",
+                    tracker=str(self.tracker_config_path) if os.path.exists(self.tracker_config_path) else "/workspace/ros_ws/drone_tracker/config/botsort.yaml",
                     device=self.device,
                     verbose=False
                 )
