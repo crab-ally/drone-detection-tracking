@@ -166,7 +166,8 @@ class ObjectDetectionTrackingNode(Node):
                     persist=True,
                     tracker=str(self.tracker_config_path) if os.path.exists(self.tracker_config_path) else "/workspace/ros_ws/drone_tracker/config/botsort.yaml",
                     device=self.device,
-                    verbose=False
+                    verbose=False,
+                    classes=[4,14]
                 )
 
                 result = results[0]
