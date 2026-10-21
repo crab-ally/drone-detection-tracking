@@ -9,7 +9,7 @@ app_config:
   output_dir: "/workspace/debug_images"
   
   # 모델 및 추론 설정
-  model_name: "yolov8n.pt"
+  model_name: "/workspace/model/yolov8n.pt"
   conf_thres: 0.25
   device: "cpu"
   playback_fps: 30
