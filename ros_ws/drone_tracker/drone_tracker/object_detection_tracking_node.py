@@ -42,8 +42,8 @@ class ObjectDetectionTrackingNode(Node):
         self.sequence_input_dir = Path(cfg.get("sequence_input_dir"))
         self.image_input_path = Path(cfg.get("image_input_path"))
         self.output_dir = Path(cfg.get("output_dir"))
-        self.save_result = True
 
+        self.save_result = cfg.get("save_result", True)
         self.model_name = cfg.get("model_name", "yolov8n.pt")
         self.conf_thres = cfg.get("conf_thres", 0.25)
         self.device = cfg.get("device", "cpu")
@@ -139,6 +139,7 @@ class ObjectDetectionTrackingNode(Node):
         self.get_logger().info(f"--- [IMAGE SEQUENCE DETECTION & TRACKING START] ---")
         self.get_logger().info(f"입력 디렉터리: {input_dir} (총 {len(image_files)}개 프레임)")
 
+        # 프레임 간격
         delay_ms = int(1000 / self.playback_fps)
         frame_num = 0
         active_tracker_states = {}
