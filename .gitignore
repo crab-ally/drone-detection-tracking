@@ -12,3 +12,6 @@ data/sequence-test/video*/
 
 # 결과 이미지
 debug_images/*.jpg
+
+# 캐시
+__pycache__/
