@@ -2,6 +2,7 @@ import os
 import json
 import cv2
 import yaml
+import time
 from pathlib import Path
 from datetime import datetime
 from ament_index_python.packages import get_package_share_directory
@@ -144,6 +145,9 @@ class ObjectDetectionTrackingNode(Node):
         frame_num = 0
         active_tracker_states = {}
 
+        # 성능 측정용 시작 시간 기록
+        start_time = time.time()
+
         try:
             for filename in image_files:
                 # ROS 2 스핀 처리 (콜백 및 시스템 이벤트 유지)
@@ -160,7 +164,7 @@ class ObjectDetectionTrackingNode(Node):
                 scale = min(960 / w, 540 / h, 1.0)
                 frame_num += 1
 
-                # Ultralytics 추적 수행
+                # Ultralytics 추적 수행 (필요한 클래스만 지정)
                 results = self.model.track(
                     source=frame,
                     conf=self.conf_thres,
@@ -168,7 +172,7 @@ class ObjectDetectionTrackingNode(Node):
                     tracker=str(self.tracker_config_path) if os.path.exists(self.tracker_config_path) else "/workspace/ros_ws/drone_tracker/config/botsort.yaml",
                     device=self.device,
                     verbose=False,
-                    classes=[4,14]
+                    classes=[4, 14]
                 )
 
                 result = results[0]
@@ -321,8 +325,17 @@ class ObjectDetectionTrackingNode(Node):
                     break
 
         finally:
+            # 성능 측정 종료 시간 기록 및 통계 산출
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            avg_fps = (frame_num / elapsed_time) if elapsed_time > 0 else 0.0
+
             cv2.destroyAllWindows()
             self.get_logger().info(f"이미지 시퀀스 처리 완료. 총 {frame_num}개 프레임 처리됨.")
+            self.get_logger().info(f"==================================================")
+            self.get_logger().info(f"⏱️ 총 처리 시간: {elapsed_time:.2f} 초")
+            self.get_logger().info(f"🚀 평균 처리 속도 (FPS): {avg_fps:.2f} FPS")
+            self.get_logger().info(f"==================================================")
 
 
 def main(args=None):
